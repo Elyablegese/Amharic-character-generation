@@ -1,0 +1,15 @@
+# Ignore OS generated files
+.DS_Store
+Thumbs.db
+
+# Ignore large datasets
+/data/
+/processed/
+/models/
+
+# Ignore virtual environments
+/venv/
+/__pycache__/
+
+# Ignore Jupyter Notebook checkpoints
+.ipynb_checkpoints/
