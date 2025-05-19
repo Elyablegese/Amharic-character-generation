@@ -2,6 +2,11 @@
 
 A character-level generative transformer model trained on Amharic text using the GPT architecture.
 
+# sample output
+Short Prompt
+![image17](https://github.com/user-attachments/assets/2d10f305-34d9-4c43-ba63-343dfcf56019)
+Long Prompt
+![image18](https://github.com/user-attachments/assets/5bb5bf00-dcb5-44ba-b8a6-9f6535d29841)
 
 ```bash
 Installation
@@ -35,9 +40,3 @@ python src/generate.py
   school = {Your University},
   year = {2025}
 }
-
-# sample output
-Short Prompt
-![image17](https://github.com/user-attachments/assets/2d10f305-34d9-4c43-ba63-343dfcf56019)
-Long Prompt
-![image18](https://github.com/user-attachments/assets/5bb5bf00-dcb5-44ba-b8a6-9f6535d29841)
