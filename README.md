@@ -10,7 +10,7 @@ A character-level generative transformer model trained on Amharic text using the
 
 ### Dataset
 
-The dataset consists of a large collection of 5GB of Amharic text. 
+The dataset consists of a large collection of Amharic text. 
 
 ## Installation
 
