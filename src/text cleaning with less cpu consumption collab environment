@@ -1,0 +1,258 @@
+# Step 1: Install Necessary Libraries
+!pip install transformers
+!pip install pandas
+!pip install openpyxl
+
+# Import Libraries
+import io
+import re
+from IPython.display import display, HTML, Javascript
+from sklearn.model_selection import train_test_split
+import ipywidgets as widgets
+import pandas as pd
+import traceback
+from transformers import AutoTokenizer, AutoModelForCausalLM
+import torch
+from google.colab import files, drive
+import os
+
+# Mount Google Drive
+drive.mount('/content/drive')
+
+# --- Model Selection and Loading ---
+model_dict = {
+    "rasyosef/bert-amharic-tokenizer": "rasyosef/bert-amharic-tokenizer",
+    "rasyosef/bert-medium-amharic": "rasyosef/bert-medium-amharic",
+    "NathyB/Hate-Speech-Detection-in-Amharic-Language-mBERT": "NathyB/Hate-Speech-Detection-in-Amharic-Language-mBERT",
+    "iocuydi/llama-2-amharic-3784m": "iocuydi/llama-2-amharic-3784m",
+    "xlm-roberta-base": "xlm-roberta-base",
+    "xlm-roberta-large": "xlm-roberta-large",
+    "bert-base-multilingual-cased": "bert-base-multilingual-cased",
+    "facebook/mbart-large-cc25": "facebook/mbart-large-cc25",
+}
+model_names = list(model_dict.keys())
+
+model_dropdown = widgets.Dropdown(
+    options=model_names,
+    value=model_names[0],
+    description='Select Model:',
+)
+display(model_dropdown)
+
+loaded_models = {}
+stop_processing = False  # Flag to control stopping the process
+tokenizer = None  # Initialize tokenizer globally
+
+def load_model(model_name):
+    global tokenizer  # Ensure tokenizer is accessible globally
+    if model_name not in loaded_models:
+        print(f"Loading model '{model_name}'...")
+        try:
+            tokenizer = AutoTokenizer.from_pretrained(model_dict[model_name])
+            model = AutoModelForCausalLM.from_pretrained(model_dict[model_name])
+            loaded_models[model_name] = {"tokenizer": tokenizer, "model": model}
+            print(f"Model '{model_name}' loaded successfully.")
+        except Exception as e:
+            print(f"Error loading model: {e}")
+            return None, None
+    else:
+        print(f"Model '{model_name}' already loaded.")
+        tokenizer = loaded_models[model_name]["tokenizer"]  # Update tokenizer
+    return loaded_models[model_name]["tokenizer"], loaded_models[model_name]["model"]
+
+load_button = widgets.Button(description="Load Model")
+display(load_button)
+
+# --- Stop Button ---
+stop_button = widgets.Button(description="Stop Processing")
+display(stop_button)
+
+def on_stop_clicked(b):
+    global stop_processing
+    stop_processing = True
+    print("Processing has been stopped.")
+
+stop_button.on_click(on_stop_clicked)
+
+# --- File Upload from Google Drive ---
+def list_drive_files():
+    drive_path = '/content/drive/MyDrive/'  # Change this path as needed
+    return [f for f in os.listdir(drive_path) if f.endswith(('.txt', '.csv', '.xls', '.xlsx'))]
+
+file_list = list_drive_files()
+checkboxes = [widgets.Checkbox(value=False, description=file) for file in file_list]
+checkbox_container = widgets.VBox(checkboxes)
+display(checkbox_container)
+
+# --- OK Button ---
+ok_button = widgets.Button(description="OK")
+display(ok_button)
+
+def on_ok_clicked(b):
+    global stop_processing
+
+    selected_files = [checkbox.description for checkbox in checkboxes if checkbox.value]
+
+    if not selected_files:  # If no files are selected, do nothing
+        print("No files selected.")
+        return
+
+    merged_train_lines = []  # List to hold all train lines
+    merged_val_lines = []  # List to hold all validation lines
+    merged_test_lines = []  # List to hold all test lines
+
+    # Get the selected model name
+    selected_model_name = model_dropdown.value
+    # Create a safe filename from the model name
+    safe_model_name = re.sub(r'[^a-zA-Z0-9_]+', '-', selected_model_name)
+
+    for selected_file in selected_files:
+        drive_path = '/content/drive/MyDrive/' + selected_file
+
+        try:
+            if selected_file.endswith(('.csv', '.xls', '.xlsx')):
+                print(f"Processing {selected_file}...")
+                if selected_file.endswith('.csv'):
+                    df = pd.read_csv(drive_path, encoding='utf-8')  # Removed errors parameter
+                elif selected_file.endswith(('.xls', '.xlsx')):
+                    df = pd.read_excel(drive_path)
+
+                df = clean_dataframe(df)
+
+                text_for_splitting = df.apply(lambda row: ' '.join(row.astype(str)), axis=1).str.cat(sep='\n')
+                train, val, test = split_text(text_for_splitting)
+                merged_train_lines.extend(train)
+                merged_val_lines.extend(val)
+                merged_test_lines.extend(test)
+                print(f"{selected_file} processing complete.")
+            elif selected_file.endswith('.txt'):
+                print(f"Processing {selected_file}...")
+                with open(drive_path, 'r', encoding='utf-8') as f:
+                    text = f.read()
+
+                # Determine which preprocessing to use based on the selected model
+                if "amharic" in selected_model_name.lower():
+                    cleaned_text = preprocess_amharic_text(text)
+                else:
+                    cleaned_text = preprocess_text(text)
+
+                train, val, test = split_text(cleaned_text)
+                merged_train_lines.extend(train)
+                merged_val_lines.extend(val)
+                merged_test_lines.extend(test)
+                print(f"{selected_file} processing complete.")
+
+            else:
+                print(f"Unsupported file type: {selected_file}")
+
+            # Check if processing has been stopped after each file processing step.
+            if stop_processing:
+                print("Processing was stopped by the user.")
+                return
+
+        except Exception as e:
+            print(f"An error occurred during processing {selected_file}: {e}")
+            traceback.print_exc()
+
+    # Save merged outputs to separate files after processing all selected files if not stopped.
+    if not stop_processing:
+        if merged_train_lines:
+            train_filename = f'/content/{safe_model_name}_train.txt'
+            with open(train_filename, 'w', encoding='utf-8') as f:
+                f.write('\n'.join(merged_train_lines))
+            print(f"Merged train data saved to {safe_model_name}_train.txt")
+            download_file(train_filename, f'{safe_model_name}_train.txt')
+
+        if merged_val_lines:
+            val_filename = f'/content/{safe_model_name}_val.txt'
+            with open(val_filename, 'w', encoding='utf-8') as f:
+                f.write('\n'.join(merged_val_lines))
+            print(f"Merged validation data saved to {safe_model_name}_val.txt")
+            download_file(val_filename, f'{safe_model_name}_val.txt')
+
+        if merged_test_lines:
+            test_filename = f'/content/{safe_model_name}_test.txt'
+            with open(test_filename, 'w', encoding='utf-8') as f:
+                f.write('\n'.join(merged_test_lines))
+            print(f"Merged test data saved to {safe_model_name}_test.txt")
+            download_file(test_filename, f'{safe_model_name}_test.txt')
+
+ok_button.on_click(on_ok_clicked)
+
+# --- Text Preprocessing Functions ---
+def remove_noise(text):
+    """Remove unwanted characters and noise from Amharic text."""
+    text = re.sub(r'[^ሀ-፿\s]+', '', text)  # Remove non-Amharic characters
+    text = re.sub(r'\s+', ' ', text).strip()  # Normalize whitespace
+    return text
+
+def standardize_text(text):
+    """Standardize the Amharic text."""
+    # Placeholder for standardization logic; implement as needed.
+    return text
+
+def tokenize_text(text):
+    """Tokenize the Amharic text using the pre-trained tokenizer."""
+    return tokenizer.tokenize(text)
+
+def preprocess_amharic_text(text):
+    """Full preprocessing pipeline for Amharic text."""
+    text = remove_noise(text)
+    text = standardize_text(text)
+    tokens = tokenize_text(text)
+    return tokens
+
+def preprocess_text(text):
+    """Generic text preprocessing (e.g., lowercasing, punctuation removal)."""
+    text = text.lower()  # Lowercase the text
+    text = re.sub(r'[^\w\s]', '', text)  # Remove punctuation
+    text = re.sub(r'\s+', ' ', text).strip()  # Normalize whitespace
+    return text
+
+def clean_dataframe(df):
+    selected_model_name = model_dropdown.value
+    for col in df.columns:
+        if df[col].dtype == 'object':
+            df[col] = df[col].astype(str)
+            if "amharic" in selected_model_name.lower():
+                df[col] = df[col].apply(preprocess_amharic_text)
+            else:
+                df[col] = df[col].apply(preprocess_text)
+    return df
+
+def split_text(text):
+    lines = text.split('\n')
+    # Check if there are enough lines to split
+    if len(lines) < 5:  # Adjust the threshold as needed
+        print("Warning: Not enough data for train/val/test split. Using all data for training.")
+        train = lines
+        val = []  # Empty list for validation
+        test = []  # Empty list for testing
+    else:
+        train, temp = train_test_split(lines, test_size=0.2, random_state=42)
+        val, test = train_test_split(temp, test_size=0.5, random_state=42)
+
+    return train, val, test
+
+def download_file(file_path, download_name):
+    files.download(file_path)
+
+# --- Model Inference ---
+def on_button_clicked(b):
+    selected_model_name = model_dropdown.value
+
+    tokenizer, model = load_model(selected_model_name)
+
+    if tokenizer and model:
+        # Enable the file selector after the model is loaded
+        for checkbox in checkboxes:
+            checkbox.value = False  # Reset checkboxes
+        checkbox_container.layout.display = 'block'  # Show checkboxes
+        ok_button.layout.display = 'block'  # Show OK button
+        print("Model loaded. Please select one or more files.")
+
+load_button.on_click(on_button_clicked)
+
+# Initially hide OK button and checkboxes until a model is loaded
+ok_button.layout.display = 'none'
+checkbox_container.layout.display = 'none'
