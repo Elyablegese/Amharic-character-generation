@@ -1,3 +1,4 @@
+# Amharic NLP | Transformer Model
 # AmharicGPT (Optimized for AWS EC2 p3.2xlarge)
 
 A character-level generative transformer model trained on Amharic text using the GPT architecture. Optimized for GPU acceleration on AWS EC2 p3.2xlarge instances with NVIDIA V100 GPUs.
