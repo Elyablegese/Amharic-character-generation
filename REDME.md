@@ -1,1 +1,0 @@
-# Amharic-character-generation
