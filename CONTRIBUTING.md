@@ -37,9 +37,7 @@ git add .
 git commit -m "Brief description of your change"
 git push origin feature-branch
 ```
-4️⃣ Submit a Pull Request (PR)
-Go to the original repository and click "New Pull Request."
-
-Fill in the necessary details, including a clear explanation of changes.
-
-Wait for review and feedback!
+  4️⃣ Submit a Pull Request (PR)
+      Go to the original repository and click "New Pull Request."
+      Fill in the necessary details, including a clear explanation of changes.
+       Wait for review and feedback!
